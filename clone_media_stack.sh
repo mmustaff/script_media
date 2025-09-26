@@ -53,11 +53,18 @@ read -p "Enter the branch name to checkout (e.g., noble): " BRANCH
 # Read and clone each repo
 while IFS='=' read -r name url; do
 	if [ -n "$name" ] && [ -n "$url" ]; then
-		echo "Cloning $name from $url..."
-		git clone "$url"
 		
 		# Extract actual directory name from URL
 		repo_dir=$(basename "$url" .git)
+		
+		# Only clone if the directory doesn't exist
+		if [ ! -d "$repo_dir" ]; then
+			echo "Cloning $name from $url..."
+			git clone "$url"
+		else
+			echo "Directory $repo_dir already exists. Skipping clone for $name."
+		fi
+		
 		cd "$repo_dir" || { echo "Failed to enter directory $repo_dir"; continue; }
 		
 		if $FORKED; then
@@ -75,6 +82,11 @@ while IFS='=' read -r name url; do
 			echo "Checking out $BRANCH..."
 			git checkout "$BRANCH"
 		fi
+
+		#Update git submodule
+		git submodule update --init
+		cd source
+		git pull
 
 		cd ..
 	fi
