@@ -88,7 +88,7 @@ while IFS='=' read -r name url; do
 		cd source
 		git pull
 
-		cd ..
+		cd ../..
 	fi
 done < "$REPO_FILE"
 
