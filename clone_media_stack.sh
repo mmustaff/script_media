@@ -107,4 +107,4 @@ while IFS='=' read -r name url; do
     fi
 done < "$REPO_FILE"
 
-echo "? All repositories processed."
+echo "✅All repositories processed."

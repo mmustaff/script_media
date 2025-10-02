@@ -2,6 +2,12 @@
 
 BASE_DIR="."  # Change this to your actual directory if needed
 VERSIONS_FILE="$BASE_DIR/versions.txt"
+RESULT_FILE="$BASE_DIR/stack_checkout_result.log"
+
+# Start fresh: overwrite result file
+exec > >(tee "$RESULT_FILE") 2>&1
+
+echo "📁 Starting repository version checkout process..."
 
 # Find all repository folders
 REPOS=($(find "$BASE_DIR" -maxdepth 1 -type d -name "os.linux.ubuntu.iot.debianpkgs.*"))
