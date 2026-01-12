@@ -3,7 +3,7 @@
 PATCH_DIR="../debian/patches/"
 SERIES_FILE="${PATCH_DIR}/series"
 SOURCE_DIR="$(pwd)"
-RESULT_FILE="patch_check_results.txt"
+RESULT_FILE="../patch_check_results.txt"
 
 echo "Checking patches listed in '$SERIES_FILE' against source in '$SOURCE_DIR'"
 echo "Results will be saved to '$RESULT_FILE'"
@@ -24,8 +24,8 @@ if [ ! -d "$PATCH_DIR" ]; then
 fi
 
 if [ ! -f "$SERIES_FILE" ]; then
-	    echo "❌ Series file '$SERIES_FILE' not found."
-	        exit 1
+	echo "❌ Series file '$SERIES_FILE' not found."
+	exit 1
 fi
 
 
@@ -37,7 +37,7 @@ while IFS= read -r patch_name; do
 	PATCH_NAME=$(basename "$patch_path")
 	echo "🔍 Checking patch: $PATCH_NAME"
 
-	if git apply --check "$patch_path" > /dev/null 2>&1; then
+	if git apply --check --index "$patch_path" > /dev/null 2>&1; then
 		echo "✅ SUCCESS: $PATCH_NAME can be applied."
 		echo "$patch_path" >> "$RESULT_FILE"
 		SUCCESS_LIST+=("$patch_path")
@@ -46,7 +46,7 @@ while IFS= read -r patch_name; do
 		FAILED_LIST+=("$patch_path")
 	fi
 
-	echo "---------------------------------------------------------------"
+echo "---------------------------------------------------------------"
 done < "$SERIES_FILE"
 
 # Log failed patches

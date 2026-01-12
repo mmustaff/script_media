@@ -47,19 +47,19 @@ elif [ "$method" == "2" ]; then
 	echo "Running Meson build..."
 
 	# Clean up old build directory
-	if [ -d "build" ]; then
+	if [ -d "builddir" ]; then
 		echo "Removing existing build directory..."
-		rm -rf build
+		rm -rf builddir
 	fi
 
-	mkdir build && cd build
-	meson .. -Dprefix="$prefix" -Dlibdir="$libdir"
+	mkdir builddir
+	meson setup -Dprefix="$prefix" -Dlibdir="$libdir" builddir
 	if [ $? -ne 0 ]; then
 		echo "Meson configuration failed. Aborting."
 		exit 1
 	fi
 
-	ninja
+	ninja -C builddir
 	if [ $? -ne 0 ]; then
 		echo "Ninja build failed. Aborting."
 		exit 1
@@ -67,7 +67,7 @@ elif [ "$method" == "2" ]; then
 
 	read -p "Build completed successfully. Do you want to install? (y/n): " choice
 	if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
-		sudo ninja install
+		sudo ninja -C builddir install
 	else
 		echo "Installation skipped."
 	fi

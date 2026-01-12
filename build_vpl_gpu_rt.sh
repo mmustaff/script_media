@@ -11,7 +11,7 @@ mkdir build && cd build
 
 # Run cmake and check for errors
 echo "Running cmake..."
-cmake ..
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_TESTS=ON -DBUILD_TOOLS=ON
 if [ $? -ne 0 ]; then
 	echo "CMake configuration failed. Aborting."
 	exit 1

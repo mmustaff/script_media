@@ -1,10 +1,10 @@
 #!/bin/bash
 
-RESULT_FILE="patch_check_results.txt"
+RESULT_FILE="../patch_check_results.txt"
 SOURCE_DIR="$(pwd)"
 BUILD_SCRIPT="$1"
-BUILDABLE_LOG="buildable_patches.txt"
-FAILED_LOG="failed_buildable_patches.txt"
+BUILDABLE_LOG="../buildable_patches.txt"
+FAILED_LOG="../failed_buildable_patches.txt"
 
 
 if [ -z "$BUILD_SCRIPT" ]; then

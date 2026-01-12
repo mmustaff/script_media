@@ -18,7 +18,7 @@ cd build || exit
 
 # Run cmake and make
 echo "Running cmake..."
-cmake .. | tee -a "$LOG_FILE"
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DINSTALL_DRIVER_SYSCONF=OFF -DENABLE_KERNELS=ON -DENABLE_NONFREE_KERNELS=ON -DBUILD_CMRTLIB=OFF -DMEDIA_BUILD_FATAL_WARNINGS=OFF | tee -a "$LOG_FILE"
 
 echo "Building with make..."
 make -j"$(nproc)" 2>&1 | tee -a "$LOG_FILE"
