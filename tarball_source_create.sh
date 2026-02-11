@@ -1,91 +1,130 @@
+
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- Defaults (relative to repo root where you run this script) ---
+# Default paths
 DEBIAN_CHANGELOG="debian/changelog"
 SOURCE_DIR="source"
-OUTPUT_DIR="$(pwd)"   # default: current parent folder
+OUTPUT_DIR="$(pwd)"
+PATCH_SCRIPT_DIR="${HOME}/script_media"
+PATCH_SCRIPT_NAME="patch_apply.sh"
 
-# --- Minimal arg parsing ---
-# Usage: ./make_source_tarball.sh [--output-dir <path>]
+# --- Argument parsing ---
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --output-dir)
       shift
-      OUTPUT_DIR="${1:-}"
-      if [[ -z "${OUTPUT_DIR}" ]]; then
-        echo "❌ --output-dir requires a value"
-        exit 1
-      fi
+      OUTPUT_DIR="${1:?Missing value for --output-dir}"
       ;;
-    -h|--help)
-      cat <<EOF
-Usage: $0 [--output-dir <path>]
-
-- Reads version info from: debian/changelog (first line)
-- Archives CONTENTS of:   source/
-- Tarball name pattern:   <pkg>_<upstream>-<series>.tar.gz
-                          e.g., intel-gmmlib_22.8.2-noble2.tar.gz
-
-Examples:
-  $0
-  $0 --output-dir ./artifacts
-EOF
-      exit 0
+    --patch-script-dir)
+      shift
+      PATCH_SCRIPT_DIR="${1:?Missing value for --patch-script-dir}"
       ;;
     *)
-      echo "❌ Unknown argument: $1"
-      echo "   Use --help for usage."
+      echo "❌ Unknown arg: $1"
       exit 1
       ;;
   esac
   shift
 done
 
-# --- Validate paths ---
-[[ -d "${SOURCE_DIR}" ]] || { echo "❌ Source dir not found: ${SOURCE_DIR}"; exit 1; }
-[[ -f "${DEBIAN_CHANGELOG}" ]] || { echo "❌ Changelog not found: ${DEBIAN_CHANGELOG}"; exit 1; }
-mkdir -p "${OUTPUT_DIR}" || { echo "❌ Cannot create/access output dir: ${OUTPUT_DIR}"; exit 1; }
+# --- Validate repo layout ---
+[[ -f "$DEBIAN_CHANGELOG" ]] || { echo "❌ Missing: $DEBIAN_CHANGELOG"; exit 1; }
+[[ -d "$SOURCE_DIR" ]] || { echo "❌ Missing: $SOURCE_DIR"; exit 1; }
+mkdir -p "$OUTPUT_DIR"
 
-# --- Read first line of changelog ---
-# Expected example:
-# intel-gmmlib (22.8.2-1ppa1~noble2) noble; urgency=medium
-first_line="$(head -n 1 "${DEBIAN_CHANGELOG}")"
-
-# --- Parse package and version in parentheses ---
-pkg="$(echo "${first_line}" | sed -n 's/^\s*\([^ ]\+\)\s*(.*).*$/\1/p')"
-paren_ver="$(echo "${first_line}" | sed -n 's/^[^(]*(\([^)]\+\)).*$/\1/p')"
-
-if [[ -z "${pkg}" || -z "${paren_ver}" ]]; then
-  echo "❌ Cannot parse package/version from changelog line:"
-  echo "   ${first_line}"
+PATCH_SCRIPT_SRC="${PATCH_SCRIPT_DIR}/${PATCH_SCRIPT_NAME}"
+[[ -f "$PATCH_SCRIPT_SRC" ]] || {
+  echo "❌ Cannot find required pre-step script: $PATCH_SCRIPT_SRC"
   exit 1
+}
+
+# ---------------------------------------------------------
+# STEP 1: Check for uncommitted changes in source/
+# ---------------------------------------------------------
+if ! git -C "$SOURCE_DIR" diff --quiet || ! git -C "$SOURCE_DIR" diff --cached --quiet; then
+  echo "⚠️  Uncommitted or unstaged changes detected in '$SOURCE_DIR'."
+  read -r -p "Reset changes and remove unstaged files? [y/N]: " answer
+
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    echo "🔄 Resetting and cleaning '$SOURCE_DIR'..."
+    git -C "$SOURCE_DIR" reset --hard
+    git -C "$SOURCE_DIR" clean -fd
+  else
+    echo "❌ Aborting: source folder is dirty and user chose not to reset."
+    exit 1
+  fi
 fi
 
-# Split: <upstream>-<debianrev>~<series>
-upstream_with_rev="${paren_ver%%~*}"   # before ~
-series="${paren_ver#*~}"               # after ~
-upstream="${upstream_with_rev%%-*}"    # before first '-'
+# ---------------------------------------------------------
+# STEP 2: Parse changelog line
+# ---------------------------------------------------------
+first_line="$(head -n 1 "$DEBIAN_CHANGELOG")"
 
-if [[ -z "${upstream}" || -z "${series}" || "${upstream}" == "${upstream_with_rev}" ]]; then
-  echo "❌ Version format unexpected: '${paren_ver}'"
-  echo "   Expect: '<upstream>-<debianrev>~<series>' e.g. 22.8.2-1ppa1~noble2"
+pkg="$(echo "$first_line" | sed -n 's/^\s*\([^ ]\+\)\s*(.*).*$/\1/p')"
+paren_ver="$(echo "$first_line" | sed -n 's/^[^(]*(\([^)]\+\)).*$/\1/p')"
+
+[[ -n "$pkg" && -n "$paren_ver" ]] || {
+  echo "❌ Cannot parse changelog first line: $first_line"
   exit 1
+}
+
+# Remove epoch (N:version → version)
+ver_no_epoch="${paren_ver#*:}"
+
+ver="$ver_no_epoch"
+first_tilde=$(expr index "$ver" "~")
+first_dash=$(expr index "$ver" "-")
+
+# Pattern detection (A or B)
+if (( first_tilde > 0 && (first_tilde < first_dash || first_dash == 0) )); then
+  # Pattern B: upstream~rev-series
+  upstream="${ver%%~*}"
+  series="${ver##*-}"
+else
+  # Pattern A: upstream-rev~series
+  upstream="${ver%%-*}"
+  series="${ver##*~}"
 fi
+
+[[ -n "$upstream" && -n "$series" ]] || {
+  echo "❌ Failed parsing version: $ver"
+  exit 1
+}
 
 tarball="${OUTPUT_DIR}/${pkg}_${upstream}-${series}.tar.gz"
 
-echo "📦 Package:      ${pkg}"
-echo "🔢 Upstream:     ${upstream}"
-echo "🧾 Series:       ${series}"
-echo "📁 Source dir:   ${SOURCE_DIR}"
-echo "🎯 Output file:  ${tarball}"
+echo "📦 Package:     $pkg"
+echo "🔢 Upstream:    $upstream"
+echo "🧾 Series:      $series"
+echo "🧩 Patch script: $PATCH_SCRIPT_SRC"
+echo "📁 Source dir:  $SOURCE_DIR"
+echo "🎯 Output file: $tarball"
 echo "---------------------------------------------------------------"
 
-# --- Create tarball from CONTENTS of source/ only ---
-# -C source . puts files at archive root (no extra 'source/' directory inside)
-[[ -f "${tarball}" ]] && rm -f "${tarball}"
-tar -czvf "${tarball}" -C "${SOURCE_DIR}" .
+# ---------------------------------------------------------
+# STEP 3: Copy patch_apply.sh into source/ and run it
+# ---------------------------------------------------------
+cp -f "$PATCH_SCRIPT_SRC" "${SOURCE_DIR}/${PATCH_SCRIPT_NAME}"
+chmod +x "${SOURCE_DIR}/${PATCH_SCRIPT_NAME}"
 
-echo "✅ Tarball created: ${tarball}"
-``
+echo "▶ Running patch script inside source/: ${PATCH_SCRIPT_NAME}"
+pushd "$SOURCE_DIR" >/dev/null
+"./${PATCH_SCRIPT_NAME}"
+popd >/dev/null
+
+# ---------------------------------------------------------
+# STEP 4: Create tarball from contents of source/
+# ---------------------------------------------------------
+[[ -f "$tarball" ]] && rm -f "$tarball"
+tar -czvf "$tarball" -C "$SOURCE_DIR" .
+
+echo "✅ Tarball created: $tarball"
+
+# ---------------------------------------------------------
+# STEP 5: Refresh git submodules
+# ---------------------------------------------------------
+echo "🔄 Refreshing submodules..."
+git submodule update --init
+
+echo "🎉 Done."

@@ -13,6 +13,13 @@ declare -A REPOS=(
     ["vpl-gpu-rt"]="os.linux.ubuntu.iot.debianpkgs.onevpl-intel-gpu"
     ["libvpl"]="os.linux.ubuntu.iot.debianpkgs.onevpl"
     ["libvpl-tool"]="os.linux.ubuntu.iot.debianpkgs.libvpl-tools"
+    ["ffmpeg"]="os.linux.ubuntu.iot.debianpkgs.ffmpeg"
+    ["gstreamer"]="os.linux.ubuntu.iot.debianpkgs.gstreamer"
+    ["gst-plugins-base"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-base"
+    ["gst-plugins-good"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-good"
+    ["gst-plugins-bad"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-bad"
+    ["gst-plugins-ugly"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-ugly"
+    ["gst-rtsp-server"]="os.linux.ubuntu.iot.debianpkgs.gst-rtsp-server"
 )
 
 # Load config if it exists
@@ -64,18 +71,15 @@ read -p "Enter the branch name to checkout (e.g., noble): " BRANCH
 while IFS='=' read -r name url; do
     if [ -n "$name" ] && [ -n "$url" ]; then
 
-        # Extract actual directory name from URL
-        repo_dir=$(basename "$url" .git)
-
         # Only clone if the directory doesn't exist
-        if [ ! -d "$repo_dir" ]; then
+        if [ ! -d "$name" ]; then
             echo "Cloning $name from $url..."
-            git clone "$url"
+            git clone "$url" "$name"
         else
-            echo "Directory $repo_dir already exists. Skipping clone for $name."
+            echo "Directory $name already exists. Skipping clone for $name."
         fi
 
-        cd "$repo_dir" || { echo "Failed to enter directory $repo_dir"; continue; }
+        cd "$name" || { echo "Failed to enter directory $name"; continue; }
 
         if [ "$FORKED" = true ]; then
             # Add upstream and fetch
