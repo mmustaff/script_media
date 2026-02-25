@@ -11,15 +11,15 @@ declare -A REPOS=(
     ["media-driver-non-free"]="os.linux.ubuntu.iot.debianpkgs.media-driver-non-free"
     ["media-driver"]="os.linux.ubuntu.iot.debianpkgs.media-driver"
     ["vpl-gpu-rt"]="os.linux.ubuntu.iot.debianpkgs.onevpl-intel-gpu"
-    ["libvpl"]="os.linux.ubuntu.iot.debianpkgs.onevpl"
-    ["libvpl-tool"]="os.linux.ubuntu.iot.debianpkgs.libvpl-tools"
+    ["vpl"]="os.linux.ubuntu.iot.debianpkgs.onevpl"
+    ["vpl-tool"]="os.linux.ubuntu.iot.debianpkgs.libvpl-tools"
     ["ffmpeg"]="os.linux.ubuntu.iot.debianpkgs.ffmpeg"
-    ["gstreamer"]="os.linux.ubuntu.iot.debianpkgs.gstreamer"
-    ["gst-plugins-base"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-base"
-    ["gst-plugins-good"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-good"
-    ["gst-plugins-bad"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-bad"
-    ["gst-plugins-ugly"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-ugly"
-    ["gst-rtsp-server"]="os.linux.ubuntu.iot.debianpkgs.gst-rtsp-server"
+    ["gst"]="os.linux.ubuntu.iot.debianpkgs.gstreamer"
+    ["gst-base"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-base"
+    ["gst-good"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-good"
+    ["gst-bad"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-bad"
+    ["gst-ugly"]="os.linux.ubuntu.iot.debianpkgs.gst-plugins-ugly"
+    #["gst-rtsp-server"]="os.linux.ubuntu.iot.debianpkgs.gst-rtsp-server"
 )
 
 # Load config if it exists
@@ -84,13 +84,36 @@ while IFS='=' read -r name url; do
         if [ "$FORKED" = true ]; then
             # Add upstream and fetch
             UPSTREAM_URL="https://github.com/intel-innersource/${REPOS[$name]}.git"
-            echo "Adding upstream remote: $UPSTREAM_URL"
-            git remote add upstream "$UPSTREAM_URL"
+            if git remote get-url upstream >/dev/null 2>&1; then
+                echo "Upstream remote already exists."
+            else
+                echo "Adding upstream remote: $UPSTREAM_URL"
+                git remote add upstream "$UPSTREAM_URL"
+            fi
             git fetch upstream
+            git fetch origin
 
-            # Checkout upstream branch
-            echo "Checking out upstream/$BRANCH..."
-            git checkout "upstream/$BRANCH"
+            # Checkout the branch from origin, then bring in latest upstream changes and push back to origin.
+            if ! git show-ref --verify --quiet "refs/remotes/upstream/$BRANCH"; then
+                echo "Branch upstream/$BRANCH not found. Skipping branch sync."
+            else
+                if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+                    echo "Checking out $BRANCH from origin/$BRANCH..."
+                    git checkout -B "$BRANCH" "origin/$BRANCH"
+                else
+                    echo "origin/$BRANCH not found; creating $BRANCH from upstream/$BRANCH and pushing to origin..."
+                    git checkout -B "$BRANCH" "upstream/$BRANCH"
+                    git push -u origin "$BRANCH"
+                fi
+
+                echo "Updating $BRANCH from upstream/$BRANCH (fast-forward only)..."
+                if git merge --ff-only "upstream/$BRANCH"; then
+                    echo "Pushing updated $BRANCH back to origin..."
+                    git push origin "$BRANCH"
+                else
+                    echo "WARNING: Cannot fast-forward $BRANCH from upstream/$BRANCH (diverged). Resolve manually."
+                fi
+            fi
         else
             # Checkout branch directly
             echo "Checking out $BRANCH..."
