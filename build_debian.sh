@@ -1,5 +1,22 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="${LOG_DIR:-"${SCRIPT_DIR}/logs"}"
+mkdir -p "${LOG_DIR}"
+LOG_FILE="${LOG_DIR}/build_debian_$(date +%Y%m%d_%H%M%S).log"
+
+# Log both commands and their output.
+exec > >(tee -a "${LOG_FILE}") 2>&1
+echo "Logging to: ${LOG_FILE}"
+echo "Started: $(date -Is)"
+echo "PWD: $(pwd)"
+echo "Args: $*"
+
+export PS4='+ $(date "+%F %T") ${BASH_SOURCE##*/}:${LINENO}: '
+set -x
+
+trap 'status=$?; set +x; echo "Finished: $(date -Is)"; echo "Exit status: ${status}"' EXIT
 
 # 1. Setup absolute paths
 ROOT_DIR="$(pwd)"
@@ -14,7 +31,17 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # 3. Prepare source repository
-git submodule update --init
+if [[ -t 0 ]]; then
+    read -r -p "Run 'git submodule update --init'? [Y/n] " _ans
+    if [[ "${_ans:-}" =~ ^[Nn]([Oo])?$ ]]; then
+        echo "Skipping: git submodule update --init"
+    else
+        git submodule update --init
+    fi
+else
+    # Non-interactive mode: keep existing behavior
+    git submodule update --init
+fi
 cd "$SOURCE_DIR"
 
 # Remove debian folder if it already exists to avoid copy conflicts
