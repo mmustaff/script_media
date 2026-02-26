@@ -57,7 +57,17 @@ git clean -fd
 cp -R ../debian ./
 
 # 5. Install build dependencies
-sudo mk-build-deps -i -s sudo ./debian/control
+if [[ -t 0 ]]; then
+    read -r -p "Run 'sudo mk-build-deps -i -s sudo ./debian/control'? [Y/n] " _ans
+    if [[ "${_ans:-}" =~ ^[Nn]([Oo])?$ ]]; then
+        echo "Skipping: sudo mk-build-deps -i -s sudo ./debian/control"
+    else
+        sudo mk-build-deps -i -s sudo ./debian/control
+    fi
+else
+    # Non-interactive mode: keep existing behavior
+    sudo mk-build-deps -i -s sudo ./debian/control
+fi
 
 # 6. Build the package (outputs to parent directory)
 debuild -b -uc -us
