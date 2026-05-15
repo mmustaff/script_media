@@ -18,6 +18,45 @@ set -x
 
 trap 'status=$?; set +x; echo "Finished: $(date -Is)"; echo "Exit status: ${status}"' EXIT
 
+install_build_deps_no_downgrades() {
+    local control_file="$1"
+    local apt_tool=(
+        apt-get
+        -o Debug::pkgProblemResolver=yes
+        --no-install-recommends
+        -o APT::Get::allow-downgrades=false
+    )
+
+    (
+        set -euo pipefail
+        local tmpdir deb_pkg sim_out
+        tmpdir="$(mktemp -d)"
+        trap 'rm -rf "${tmpdir}"' EXIT
+
+        # Build the *-build-deps*.deb in a temp dir (no root required).
+        cd "${tmpdir}"
+        mk-build-deps --tool "${apt_tool[*]}" "${control_file}"
+        deb_pkg="$(ls -1 "${tmpdir}"/*build-deps*.deb 2>/dev/null | head -n 1)"
+        if [[ -z "${deb_pkg}" ]]; then
+            echo "ERROR: mk-build-deps did not produce a *build-deps*.deb in ${tmpdir}" >&2
+            exit 1
+        fi
+
+        # Simulate the install first; refuse to proceed if APT would downgrade anything.
+        sim_out="$(sudo "${apt_tool[@]}" -s install "${deb_pkg}" || true)"
+        if echo "${sim_out}" | grep -Eqi '(^|\n)The following packages will be DOWNGRADED:|(^|\n)Downgraded:|DOWNGRADED'; then
+            echo "ERROR: Refusing to install build-dependencies because APT plans to downgrade packages." >&2
+            echo "---- APT simulation output (downgrade-related lines) ----" >&2
+            echo "${sim_out}" | grep -Ei 'DOWNGRADED|Downgrad' >&2 || true
+            echo "--------------------------------------------------------" >&2
+            exit 1
+        fi
+
+        # Proceed with the real install.
+        sudo "${apt_tool[@]}" install -y "${deb_pkg}"
+    )
+}
+
 # 1. Setup absolute paths
 ROOT_DIR="$(pwd)"
 OUTPUT_DIR="$ROOT_DIR/deb"
@@ -58,15 +97,15 @@ cp -R ../debian ./
 
 # 5. Install build dependencies
 if [[ -t 0 ]]; then
-    read -r -p "Run 'sudo mk-build-deps -i -s sudo ./debian/control'? [Y/n] " _ans
+    read -r -p "Install build dependencies (refuse downgrades)? [Y/n] " _ans
     if [[ "${_ans:-}" =~ ^[Nn]([Oo])?$ ]]; then
-        echo "Skipping: sudo mk-build-deps -i -s sudo ./debian/control"
+        echo "Skipping: build-dependency installation"
     else
-        sudo mk-build-deps -i -s sudo ./debian/control
+        install_build_deps_no_downgrades "${PWD}/debian/control"
     fi
 else
     # Non-interactive mode: keep existing behavior
-    sudo mk-build-deps -i -s sudo ./debian/control
+    install_build_deps_no_downgrades "${PWD}/debian/control"
 fi
 
 # 6. Build the package (outputs to parent directory)
